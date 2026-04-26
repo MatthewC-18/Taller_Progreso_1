@@ -1,88 +1,105 @@
 package modelo;
 
 import java.util.ArrayList;
-import java.util.List;
 
 public class GestorVentas {
 
-    private final List<Compra> compras = new ArrayList<>();
+    private ArrayList<Compra> compras;
 
+    public GestorVentas() {
+        compras = new ArrayList<>();
+    }
+
+    // Registra una compra si pasa todas las validaciones
     public Compra registrarCompra(Ruta ruta, String cedula, String nombre, int cantidad) {
-        validarDatos(ruta, cedula, nombre, cantidad);
-        validarCapacidad(ruta, cantidad);
-        validarCedulaEnRuta(ruta, cedula, cantidad);
 
-        Compra compra = new Compra(ruta, cedula.trim(), nombre.trim(), cantidad);
+        // Validar que haya ruta seleccionada
+        if (ruta == null) {
+            throw new IllegalArgumentException("Debe seleccionar una ruta.");
+        }
+
+        // Validar cedula
+        if (cedula == null || cedula.trim().equals("")) {
+            throw new IllegalArgumentException("La cedula no puede estar vacia.");
+        }
+        String ced = cedula.trim();
+        if (ced.length() != 10) {
+            throw new IllegalArgumentException("La cedula debe tener 10 digitos.");
+        }
+        for (int i = 0; i < ced.length(); i++) {
+            if (!Character.isDigit(ced.charAt(i))) {
+                throw new IllegalArgumentException("La cedula solo debe tener numeros.");
+            }
+        }
+
+        // Validar nombre
+        if (nombre == null || nombre.trim().equals("")) {
+            throw new IllegalArgumentException("El nombre no puede estar vacio.");
+        }
+
+        // Validar cantidad entre 1 y 5
+        if (cantidad < 1 || cantidad > Ruta.MAX_BOLETOS) {
+            throw new IllegalArgumentException("La cantidad debe estar entre 1 y " + Ruta.MAX_BOLETOS + ".");
+        }
+
+        // Validar capacidad disponible
+        int disponibles = getDisponibles(ruta.getNombre());
+        if (cantidad > disponibles) {
+            throw new IllegalArgumentException("No hay suficientes asientos. Disponibles: " + disponibles);
+        }
+
+        // Validar que la cedula no haya comprado ya 5 en esta ruta
+        int yaComprados = getBoletosPorCedula(ruta.getNombre(), ced);
+        if (yaComprados + cantidad > Ruta.MAX_BOLETOS) {
+            throw new IllegalArgumentException("La cedula " + ced + " ya tiene "
+                    + yaComprados + " boleto(s) en esta ruta. Maximo " + Ruta.MAX_BOLETOS + ".");
+        }
+
+        // Si todo esta bien, crear la compra y guardarla
+        Compra compra = new Compra(ruta.getNombre(), ced, nombre.trim(), cantidad, ruta.getPrecio());
         compras.add(compra);
         return compra;
     }
 
-    // ---------- Validaciones ----------
-
-    private void validarDatos(Ruta ruta, String cedula, String nombre, int cantidad) {
-        if (ruta == null) {
-            throw new IllegalArgumentException("Debe seleccionar una ruta.");
+    // Cuenta cuantos boletos se han vendido en una ruta
+    public int getVendidos(String rutaNombre) {
+        int total = 0;
+        for (int i = 0; i < compras.size(); i++) {
+            Compra c = compras.get(i);
+            if (c.getRutaNombre().equals(rutaNombre)) {
+                total += c.getCantidad();
+            }
         }
-        if (cedula == null || cedula.trim().isEmpty()) {
-            throw new IllegalArgumentException("La cédula no puede estar vacía.");
-        }
-        if (!cedula.trim().matches("\\d{10}")) {
-            throw new IllegalArgumentException("La cédula debe tener 10 dígitos numéricos.");
-        }
-        if (nombre == null || nombre.trim().isEmpty()) {
-            throw new IllegalArgumentException("El nombre no puede estar vacío.");
-        }
-        if (cantidad < 1 || cantidad > Ruta.MAX_BOLETOS_POR_CEDULA) {
-            throw new IllegalArgumentException(
-                    "La cantidad debe estar entre 1 y " + Ruta.MAX_BOLETOS_POR_CEDULA + " boletos.");
-        }
+        return total;
     }
 
-    private void validarCapacidad(Ruta ruta, int cantidad) {
-        int disponibles = getBoletosDisponibles(ruta);
-        if (cantidad > disponibles) {
-            throw new IllegalArgumentException(
-                    "No hay suficientes asientos disponibles en " + ruta.getNombre()
-                            + ". Disponibles: " + disponibles);
-        }
+    // Cuantos asientos quedan libres en una ruta
+    public int getDisponibles(String rutaNombre) {
+        return Ruta.CAPACIDAD - getVendidos(rutaNombre);
     }
 
-    private void validarCedulaEnRuta(Ruta ruta, String cedula, int cantidad) {
-        int yaComprados = getBoletosComprados(ruta, cedula.trim());
-        if (yaComprados + cantidad > Ruta.MAX_BOLETOS_POR_CEDULA) {
-            throw new IllegalArgumentException(
-                    "La cédula " + cedula.trim() + " ya tiene " + yaComprados
-                            + " boleto(s) en esta ruta. Máximo permitido: "
-                            + Ruta.MAX_BOLETOS_POR_CEDULA + ".");
-        }
-    }
-
-
-    public int getBoletosVendidos(Ruta ruta) {
-        return compras.stream()
-                .filter(c -> c.getRuta() == ruta)
-                .mapToInt(Compra::getCantidad)
-                .sum();
-    }
-
-    public int getBoletosDisponibles(Ruta ruta) {
-        return Ruta.CAPACIDAD_MAXIMA - getBoletosVendidos(ruta);
-    }
-
+    // Total de dinero recaudado
     public double getTotalRecaudado() {
-        return compras.stream()
-                .mapToDouble(Compra::getPrecioTotal)
-                .sum();
+        double total = 0;
+        for (int i = 0; i < compras.size(); i++) {
+            total += compras.get(i).getPrecioTotal();
+        }
+        return total;
     }
 
-    private int getBoletosComprados(Ruta ruta, String cedula) {
-        return compras.stream()
-                .filter(c -> c.getRuta() == ruta && c.getCedula().equalsIgnoreCase(cedula))
-                .mapToInt(Compra::getCantidad)
-                .sum();
+    // Cuantos boletos lleva una cedula en una ruta
+    private int getBoletosPorCedula(String rutaNombre, String cedula) {
+        int total = 0;
+        for (int i = 0; i < compras.size(); i++) {
+            Compra c = compras.get(i);
+            if (c.getRutaNombre().equals(rutaNombre) && c.getCedula().equals(cedula)) {
+                total += c.getCantidad();
+            }
+        }
+        return total;
     }
 
-    public List<Compra> getCompras() {
-        return new ArrayList<>(compras);
+    public ArrayList<Compra> getCompras() {
+        return compras;
     }
 }
