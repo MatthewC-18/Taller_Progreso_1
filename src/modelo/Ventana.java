@@ -1,4 +1,5 @@
 package modelo;
+
 import javax.swing.*;
 public class Ventana {
 
